@@ -2,7 +2,7 @@ import requests
 import json 
 import pandas as pd
 import datetime as dt
-from classes import (
+from optimiser_tools.classes import (
     BessCharacteristics,
     BessState,
     MarketType,
@@ -21,9 +21,7 @@ from classes import (
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from kusto_connection import Kusto_Connection
-
-kc = Kusto_Connection()
+from utils.kusto_connection import kc
 
 class OptiRunner:
     def __init__(self):
@@ -181,42 +179,3 @@ class OptiRunner:
     
 
 
-#     let t = datatable(timestampUtcCeiling:datetime)
-# [ datetime('2025-08-04')];
-# let tbl = t
-# | make-series max(timestampUtcCeiling) on timestampUtcCeiling from startofday(datetime('2025-08-04')) to endofday(datetime('2025-08-04')) step 5m
-# | mv-expand timestampUtcCeiling to typeof(datetime)
-# | project time_of_run = timestampUtcCeiling;
-# let pd = tbl
-# | join kind=leftouter(
-# PREDISPATCHPRICE_ADF
-# | where LASTCHANGED between (startofday(datetime('2025-08-04')) .. endofday(datetime('2025-08-04')) )
-# | where REGIONID == 'NSW1' 
-# | project LASTCHANGED,DATETIME,RRP
-# | extend interval_end = DATETIME
-# | extend time_of_run = bin(LASTCHANGED, 30m)
-# | summarize arg_max(LASTCHANGED, *) by interval_end, time_of_run
-# | where interval_end > time_of_run
-# | project interval_end, time_of_run, RRP
-# ) on time_of_run 
-# | project-away time_of_run1
-# | extend prio = 0, interval_start = interval_end - 30m;
-# let p5 = tbl
-# | join kind=leftouter (
-# P5MIN_REGIONSOLUTION
-# | where RUN_DATETIME between (startofday(datetime('2025-08-04')) .. endofday(datetime('2025-08-04')) )
-# | where REGIONID == 'NSW1'
-# | project RUN_DATETIME, INTERVAL_DATETIME, RRP
-# | extend interval_end = INTERVAL_DATETIME
-# | extend time_of_run = bin(RUN_DATETIME,5m)
-# | summarize arg_max(RUN_DATETIME, *) by interval_end, time_of_run
-# | where interval_end > time_of_run
-# | project interval_end, time_of_run, RRP
-# ) on time_of_run
-# | project-away time_of_run1
-# | extend prio = 1, interval_start = interval_end - 5m;
-# pd
-# | union p5
-# | where isnotempty(interval_end)
-# | summarize arg_max(prio, *) by time_of_run, interval_end
-# | sort by time_of_run asc , interval_end asc 

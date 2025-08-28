@@ -1,9 +1,9 @@
 from dash import Dash, callback, Input, Output, html, dcc, ctx, dash_table, register_page, ALL
 import dash_bootstrap_components as dbc
-from price_handler import Price_Handler
-from call_me_maybe import OptiRunner
+from price_identification_tool.price_handler import Price_Handler
+from optimiser_tools.call_me_maybe import OptiRunner
 import datetime as dt
-from functions import to_dt, to_ts
+from price_identification_tool.functions import to_dt, to_ts
 import pandas as pd
 
 register_page(__name__)

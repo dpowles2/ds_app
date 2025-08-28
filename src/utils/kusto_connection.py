@@ -19,7 +19,10 @@ class Kusto_Connection():
 
     def query(self, db, query):
         response = self.kusto_client.execute(db, query)
-        return dataframe_from_result_table(response.primary_results[0])
+        out = [dataframe_from_result_table(res) for res in response.primary_results]
+        return out[0] if len(out) == 1 else out
 
     def __call__(self, db, query):
         return self.query(db=db,query=query)
+    
+kc = Kusto_Connection(Clusters.shared)

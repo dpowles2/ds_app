@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
-from kusto_connection import Kusto_Connection
-from functions import get_rmse, find_spread_n_hours, get_high_price_scores, cat_me
+from utils.kusto_connection import kc
+from price_identification_tool.functions import get_rmse, find_spread_n_hours, get_high_price_scores, cat_me
 from os.path import exists
 import plotly.express as px
 
@@ -17,7 +17,6 @@ class Price_Handler:
         self.prices_agg = None
         self.prices_agg_for_disp = None
         self.months_of_interest = None
-        self.kc = Kusto_Connection()
         self.is_updating = False
         self.slider_points = None
         self.dates = None
@@ -95,7 +94,7 @@ class Price_Handler:
         | sort by interval_start asc
         '''
 
-        prices = self.kc(db,q)
+        prices = kc(db,q)
         prices = prices.sort_values('interval_start', ascending=True)
         prices.DP_RRP = prices.DP_RRP.ffill()
         # prices.DP_RRP = prices.DP_RRP.apply(lambda x: round(x,2))
@@ -122,7 +121,7 @@ class Price_Handler:
         | extend interval_start = interval_start + totimespan(strcat(minute_offset,'m'))
         | project-away minute_offset'''
 
-        pd_prices = self.kc(db,q)
+        pd_prices = kc(db,q)
         prices = prices.merge(pd_prices[['interval_start', 'PD_RRP']], on = 'interval_start', how = 'left')
         prices.PD_RRP = prices.PD_RRP.fillna(0)
         prices.REGIONID = prices.REGIONID.fillna(self.region)
@@ -289,6 +288,68 @@ class Price_Handler:
             m.extend(temp.iloc[:n].Month.to_list())
             c.extend([cat]*n)
         return m,c
+    
+    def get_finessed_months_for_cat(self):
+        vol_max = self.prices_agg[self.prices_agg.volitility == 'volitile'].sort_values('dp_above_1000_score', ascending=False).reset_index(drop=True)
+        vol_min = self.prices_agg[self.prices_agg.volitility == 'volitile'].sort_values('dp_above_1000_score', ascending=True).reset_index(drop=True)
+        sh = int(vol_max.shape[0] * 0.2)
+        vol_max = vol_max.iloc[:sh]
+        vol_min = vol_min.iloc[:sh]
+
+        var_max = self.prices_agg[self.prices_agg.volitility == 'variable_but_below_strike'].sort_values('absolute_dp_score', ascending=False).reset_index(drop=True)
+        var_min = self.prices_agg[self.prices_agg.volitility == 'variable_but_below_strike'].sort_values('absolute_dp_score', ascending=True).reset_index(drop=True)
+        sh = int(var_max.shape[0] * 0.2)
+        var_max = var_max.iloc[:sh]
+        var_min = var_min.iloc[:sh]
+
+        return [vol_max,vol_min,var_max,var_min]
+
+    def compute_with_extremes(self, dfs, val, m,c, n=2):
+        vol_max,vol_min,var_max,var_min = dfs
+
+        ## VOL
+        cat = 'vol_max by highest' + val
+        temp = vol_max.groupby('Month')[[val]].count().sort_values(val, ascending=False).reset_index()
+        m.extend(temp.iloc[:n].Month.to_list())
+        c.extend([cat]*n)
+
+        cat = 'vol_max by lowest' + val
+        temp = vol_max.groupby('Month')[[val]].count().sort_values(val, ascending=True).reset_index()
+        m.extend(temp.iloc[:n].Month.to_list())
+        c.extend([cat]*n)
+
+        cat = 'vol_min by highest' + val
+        temp = vol_min.groupby('Month')[[val]].count().sort_values(val, ascending=False).reset_index()
+        m.extend(temp.iloc[:n].Month.to_list())
+        c.extend([cat]*n)
+
+        cat = 'vol_min by lowest' + val
+        temp = vol_min.groupby('Month')[[val]].count().sort_values(val, ascending=True).reset_index()
+        m.extend(temp.iloc[:n].Month.to_list())
+        c.extend([cat]*n)
+        ## VAR
+        cat = 'var by highest' + val
+        temp = var_max.groupby('Month')[[val]].count().sort_values(val, ascending=False).reset_index()
+        m.extend(temp.iloc[:n].Month.to_list())
+        c.extend([cat]*n)
+
+        cat = 'var_max by lowest' + val
+        temp = var_max.groupby('Month')[[val]].count().sort_values(val, ascending=True).reset_index()
+        m.extend(temp.iloc[:n].Month.to_list())
+        c.extend([cat]*n)
+
+        cat = 'var_min by highest' + val
+        temp = var_min.groupby('Month')[[val]].count().sort_values(val, ascending=False).reset_index()
+        m.extend(temp.iloc[:n].Month.to_list())
+        c.extend([cat]*n)
+
+        cat = 'var_min by lowest' + val
+        temp = var_min.groupby('Month')[[val]].count().sort_values(val, ascending=True).reset_index()
+        m.extend(temp.iloc[:n].Month.to_list())
+        c.extend([cat]*n)
+
+        return m,c
+
 
     def get_months_of_interest(self):
         month, cats = [],[]
@@ -347,6 +408,13 @@ class Price_Handler:
         cat = 'inaccurate pd spread period'
         val = 'max_period_score_pd_inaccurate'
         month, cats = self.get_months_for_cat(cat,val,month,cats, n = [2,2,1], vol=True)
+
+        # dfs = self.get_finessed_months_for_cat()
+
+        ## High low spread
+        # val = 'spread'
+        # month, cats = self.compute_with_extremes(dfs,val,month,cats)
+
 
         self.months_of_interest = pd.DataFrame({'Month': month, 'Categories':cats}).groupby('Month').agg(lambda x: str(list(x))[1:-1] ).reset_index()
         if isinstance(self.months_of_interest.loc[0,'Month'],np.int64):
