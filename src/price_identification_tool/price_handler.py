@@ -4,6 +4,7 @@ from utils.kusto_connection import kc
 from price_identification_tool.functions import get_rmse, find_spread_n_hours, get_high_price_scores, cat_me
 from os.path import exists
 import plotly.express as px
+from price_identification_tool.months_of_interest import NSW1
 
 class Price_Handler:
     def __init__(self):
@@ -16,6 +17,7 @@ class Price_Handler:
         self.prices = None
         self.prices_agg = None
         self.prices_agg_for_disp = None
+        self.preselect_months = False
         self.months_of_interest = None
         self.is_updating = False
         self.slider_points = None
@@ -26,8 +28,8 @@ class Price_Handler:
         self.col = '_day'
         self.vol = 'volitile'
         self.pretty_dict = {i:j for i,j in zip(
-        ['_day', 'volitility', f'dp_above_{self.high_price_threshold}_score','absolute_dp_score',f'dp_above_{self.med_price_threshold}_score', 'spread', 'rmse_p5_quantile', 'rmse_pd_quantile', 'max_period_score_p5_quantile', 'min_period_score_p5_quantile', 'max_period_score_pd_quantile', 'min_period_score_pd_quantile'],
-        ['Day', 'Volitility', f'DP > {self.high_price_threshold} score','Absolute DP score',f'DP > {self.med_price_threshold} score', 'Spread', 'P5 RMSE', 'PD RMSE', 'P5 max spread alignment', 'P5 min spread alignment', 'PD max spread alignment', 'PD min spread alignment']
+        ['_day', 'volitility', f'dp_above_{self.high_price_threshold}_score','absolute_dp_score',f'dp_above_{self.med_price_threshold}_score', 'spread', 'spread_quantile', 'rmse_p5_quantile', 'rmse_pd_quantile', 'max_period_score_p5_quantile', 'min_period_score_p5_quantile', 'max_period_score_pd_quantile', 'min_period_score_pd_quantile'],
+        ['Day', 'Volitility', f'DP > {self.high_price_threshold} score','Absolute DP score',f'DP > {self.med_price_threshold} score', 'Spread', 'Spread quantifier', 'P5 RMSE Acc', 'PD RMSE Acc', 'P5 max spread alignment', 'P5 min spread alignment', 'PD max spread alignment', 'PD min spread alignment']
     )}
         self.dict_pretty = {j:i for i,j in self.pretty_dict.items()}
         self.tt_str = '0-1\ncompared with days of similar volitility\n(High is bad)'
@@ -37,6 +39,15 @@ class Price_Handler:
              f'P5 RMSE Quantile Position {self.tt_str}', f'P5 RMSE Quantile Position {self.tt_str}', 
              f'P5-DP max-price spread alignment {self.tt_str}', f'P5-DP min-price spread alignment {self.tt_str}', 
              f'PD-DP max-price spread alignment {self.tt_str}', f'PD-DP min-price spread alignment {self.tt_str}']
+        )}
+        self.accuracy_dict = {
+            round(i*0.05,2):j for i,j in zip(
+                range(20), ['very high', 'very high', 'high', 'high', 'ok', 'ok', 'ok', 'ok', 'med', 'med', 'med', 'med', 'bad', 'bad', 'bad', 'bad', 'very bad', 'very bad', 'extremely bad', 'extremely bad']
+            )
+        }
+        self.spread_dict = {i:j for i,j in zip(
+           ['very high', 'high', 'ok', 'med', 'bad', 'very bad', 'extremely bad'],
+           ['Extremely low','very low', 'low', 'moderate', 'high','very high', 'extremely high' ]
         )}
 
     def get_prices(self, refresh = False):
@@ -53,7 +64,7 @@ class Price_Handler:
             self.prices.to_json(path, index = None)
         print('begin price agg')
         self.get_prices_agg(refresh)
-        self.get_months_of_interest()
+        self.get_months_of_interest() if not self.preselect_months else self.get_preselected_months()
         print('showing')
         self.display_prices_agg_by_month()
         self.refresh_slider()
@@ -203,6 +214,7 @@ class Price_Handler:
         
         self.prices_agg[['month', 'year']] = self.prices_agg.apply(lambda x: pd.Series({'month':x._day.month,'year':x._day.year}), axis=1)
 
+
     def display_prices_agg_by_month(self, date_ind = None):
         if date_ind is None:
             month = self.start_dt_nem.month
@@ -234,7 +246,8 @@ class Price_Handler:
     def return_prices_for_display(self):
         cols = [
             '_day', 'volitility', 
-            f'dp_above_{self.high_price_threshold}_score','absolute_dp_score',f'dp_above_{self.med_price_threshold}_score', 'spread',
+            f'dp_above_{self.high_price_threshold}_score','absolute_dp_score',f'dp_above_{self.med_price_threshold}_score', 
+            'spread', 'spread_quantile',
             'rmse_p5_quantile', 'rmse_pd_quantile', 
             'max_period_score_p5_quantile', 'min_period_score_p5_quantile',
             'max_period_score_pd_quantile', 'min_period_score_pd_quantile'
@@ -244,9 +257,11 @@ class Price_Handler:
         for c in cols: 
             if c in ['_day', 'volitility']: continue
             df[c] = df[c].apply(lambda x: round(x,2))
-        
+            if c in ['spread_quantile' ,'rmse_p5_quantile', 'rmse_pd_quantile', 'max_period_score_p5_quantile', 'min_period_score_p5_quantile', 'max_period_score_pd_quantile', 'min_period_score_pd_quantile']:
+                df[c] = df[c].apply(lambda x: self.accuracy_dict[round((x // 0.05) * 0.05,2)])
+            if c == 'spread_quantile':
+                df[c] = df[c].apply(lambda x: self.spread_dict[x])
         df.columns = [self.pretty_dict[c] for c in cols]
-
         return df
     
     def refresh_slider(self):
@@ -350,6 +365,8 @@ class Price_Handler:
 
         return m,c
 
+    def get_preselected_months(self):
+        self.months_of_interest = pd.DataFrame({'Month': [i for i in NSW1.keys()], 'Categories':[i for i in NSW1.values()]})
 
     def get_months_of_interest(self):
         month, cats = [],[]

@@ -60,9 +60,19 @@ def update_date_selection(start_date, end_date):
 get_data_buttons = html.Div([
     html.Button('Get data', id = 'get_data_button', n_clicks=0),
     html.Button('Refresh data', id = 'refresh_data_button', n_clicks=0),
+    dcc.Checklist(['manual selection'], id='man_sel'),
     html.Br(),
     html.Br()
 ])
+
+@callback(
+        Input('man_sel', 'value')
+)
+def flip_val(value):
+    if 'manual selection' in value:
+        pc.preselect_months = True
+    else:
+        pc.preselect_months = False
 
 @callback (
     Output('mo_selector', 'children'),
@@ -95,7 +105,10 @@ def on_click(get_data, refresh_data):#, refresh_data):
                 html.Div(dcc.Dropdown(ls, ls[0], id='col_selector', clearable=False),style={'width': '30%', 'display': 'inline-block', 'padding': '10px'}),
                 html.Div(dcc.Dropdown(['Asc', 'Desc'], 'Asc', id='asc_or_desc_selector', clearable=False),style={'width': '30%', 'display': 'inline-block', 'padding': '10px'}),
                 ])]),
-            html.Div([html.Button(j.strftime('%b %Y'), id={'type': 'mo_button', 'index':i}) for i,j in enumerate(df.Month.to_list())])
+            html.Div([
+                html.H3('Months of interest: '),
+                html.Div([html.Button(j.strftime('%b %Y'), id={'type': 'mo_button', 'index':i}) for i,j in enumerate(df.Month.to_list())]),
+                ])
     )
 
 col_sorter = html.Div(id='col_sorter')
@@ -123,10 +136,79 @@ def show_month_details(n_clicks):
 
 month_details = html.Div([''],id='month_details')
 
+def get_styled_data(df):
+    cols = [pc.pretty_dict[i] for i in ['spread_quantile', 'rmse_p5_quantile', 'rmse_pd_quantile', 'max_period_score_p5_quantile', 'min_period_score_p5_quantile', 'max_period_score_pd_quantile', 'min_period_score_pd_quantile']]
+    ret = []
+    k = [i for i in pc.spread_dict.keys()]
+    v = [i for i in pc.spread_dict.values()]
+    for col in cols:
+        ret.extend([
+            {
+                'if': {
+                    'filter_query': '{%s} = "%s"' % (col, k[0] if col != cols[0] else v[0]),
+                    'column_id': col
+                },
+                'backgroundColor': '#63BE7B',
+                'color': 'purple',
+            },
+            {
+                'if': {
+                    'filter_query': '{%s} = "%s"' % (col, k[1] if col != cols[0] else v[1]),
+                    'column_id': col
+                },
+                'backgroundColor': '#97CD7E',
+                'color': 'purple',
+            },
+            {
+                'if': {
+                    'filter_query': '{%s} = "%s"' % (col, k[2] if col != cols[0] else v[2]),
+                    'column_id': col
+                },
+                'backgroundColor': '#CBDC81',
+                'color': 'purple',
+            },
+            {
+                'if': {
+                    'filter_query': '{%s} = "%s"' % (col, k[3] if col != cols[0] else v[3]),
+                    'column_id': col
+                },
+                'backgroundColor': '#FFEB84',
+                'color': 'purple',
+            },
+            {
+                'if': {
+                    'filter_query': '{%s} = "%s"' % (col, k[4] if col != cols[0] else v[4]),
+                    'column_id': col
+                },
+                'backgroundColor': '#FDC07C',
+                'color': 'purple',
+            },
+            {
+                'if': {
+                    'filter_query': '{%s} = "%s"' % (col, k[5] if col != cols[0] else v[5]),
+                    'column_id': col
+                },
+                'backgroundColor': '#FB9574',
+                'color': 'purple',
+            },
+            
+            {
+                'if': {
+                    'filter_query': '{%s} = "%s"' % (col, k[6] if col != cols[0] else v[6]),
+                    'column_id': col
+                },
+                'backgroundColor': '#F8696B',
+                'color': 'purple',
+            },
+
+            # idxmax(axis=1) finds the max indices of each row
+        ])
+    return ret
+
 
 def get_df():
     df = pc.return_prices_for_display()
-    return dash_table.DataTable(df.to_dict('records'),[{"name": c, "id": c} for c in df.columns], style_table={'height': '300px', 'overflowY': 'auto'}, tooltip_data=[pc.tooltips], id='date_selector')
+    return dash_table.DataTable(df.to_dict('records'),[{"name": c, "id": c} for c in df.columns], style_table={'height': '400px', 'overflowY': 'auto'}, tooltip_data=[pc.tooltips],style_data_conditional=get_styled_data(df),fixed_rows={'headers': True}, id='date_selector')
 
 mo_selector = html.Div([''], id = 'mo_selector')
 @callback (
